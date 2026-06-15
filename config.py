@@ -4,15 +4,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "mind2.db")
 
 # Daily motivation time (hour, minute in UTC)
 MOTIVATION_HOUR = int(os.getenv("MOTIVATION_HOUR", "7"))
 MOTIVATION_MINUTE = int(os.getenv("MOTIVATION_MINUTE", "0"))
 
-# Claude model
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-5")
+# Gemini model
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Max conversation history per user
 MAX_HISTORY = 10

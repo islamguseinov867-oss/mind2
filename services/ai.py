@@ -1,9 +1,9 @@
 import json
-import anthropic
-from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_HISTORY, STRESS_KEYWORDS
+import google.generativeai as genai
+from config import GEMINI_API_KEY, GEMINI_MODEL, MAX_HISTORY, STRESS_KEYWORDS
 import database
 
-client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """Ты — «Второй Мозг», персональный ИИ-помощник, наставник и советник. Ты говоришь на русском языке.
 
@@ -40,6 +40,14 @@ def detect_stress(text: str) -> bool:
     return any(keyword in text_lower for keyword in STRESS_KEYWORDS)
 
 
+def _build_gemini_history(history: list) -> list:
+    gemini_history = []
+    for msg in history:
+        role = "user" if msg["role"] == "user" else "model"
+        gemini_history.append({"role": role, "parts": [msg["content"]]})
+    return gemini_history
+
+
 async def get_ai_response(user_id: int, user_message: str) -> str:
     user = await database.get_user(user_id)
 
@@ -51,25 +59,25 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
             history = []
 
     is_stressed = detect_stress(user_message)
-
     message_to_send = user_message
     if is_stressed:
         message_to_send = f"[Пользователь кажется в стрессе или расстроен]\n{user_message}"
 
-    history.append({"role": "user", "content": message_to_send})
-
+    # Keep history without current message for Gemini chat history
     if len(history) > MAX_HISTORY * 2:
         history = history[-(MAX_HISTORY * 2):]
 
-    response = await client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=history
+    gemini_history = _build_gemini_history(history)
+
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL,
+        system_instruction=SYSTEM_PROMPT
     )
+    chat = model.start_chat(history=gemini_history)
+    response = chat.send_message(message_to_send)
+    assistant_reply = response.text
 
-    assistant_reply = response.content[0].text
-
+    history.append({"role": "user", "content": message_to_send})
     history.append({"role": "assistant", "content": assistant_reply})
 
     await database.update_conversation_history(user_id, json.dumps(history, ensure_ascii=False))
@@ -78,26 +86,22 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
 
 async def get_motivation() -> str:
-    response = await client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=300,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": "Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное."
-        }]
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL,
+        system_instruction=SYSTEM_PROMPT
     )
-    return response.content[0].text
+    response = model.generate_content(
+        "Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное."
+    )
+    return response.text
 
 
 async def get_support_message(user_message: str) -> str:
-    response = await client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=512,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу. Сначала покажи что понимаешь его чувства."
-        }]
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL,
+        system_instruction=SYSTEM_PROMPT
     )
-    return response.content[0].text
+    response = model.generate_content(
+        f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу. Сначала покажи что понимаешь его чувства."
+    )
+    return response.text
