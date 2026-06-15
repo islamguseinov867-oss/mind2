@@ -1,4 +1,5 @@
 import json
+import asyncio
 from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY, GEMINI_MODEL, MAX_HISTORY, STRESS_KEYWORDS
@@ -62,7 +63,8 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
     contents = _build_contents(history, message_to_send)
 
-    response = client.models.generate_content(
+    response = await asyncio.to_thread(
+        client.models.generate_content,
         model=GEMINI_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
@@ -78,7 +80,8 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
 
 async def get_motivation() -> str:
-    response = client.models.generate_content(
+    response = await asyncio.to_thread(
+        client.models.generate_content,
         model=GEMINI_MODEL,
         contents="Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное.",
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
@@ -87,7 +90,8 @@ async def get_motivation() -> str:
 
 
 async def get_support_message(user_message: str) -> str:
-    response = client.models.generate_content(
+    response = await asyncio.to_thread(
+        client.models.generate_content,
         model=GEMINI_MODEL,
         contents=f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу.",
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
