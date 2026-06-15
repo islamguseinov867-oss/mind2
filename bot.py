@@ -31,6 +31,7 @@ async def post_init(application: Application) -> None:
     db = database.Database(config.DATABASE_PATH)
     await db.init_db()
     application.bot_data["db"] = db
+    await setup_daily_motivation(application)
     await check_and_reschedule_pending_reminders(application, db)
     logger.info("Bot initialized successfully.")
 
@@ -60,9 +61,6 @@ def main() -> None:
 
     # General message handler (AI chat) — must be last
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Setup daily motivation job
-    setup_daily_motivation(application)
 
     logger.info("Starting bot polling...")
     application.run_polling(drop_pending_updates=True)
