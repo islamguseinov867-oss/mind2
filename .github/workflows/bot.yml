@@ -7,10 +7,6 @@ on:
   schedule:
     - cron: "0 */5 * * *"   # Каждые 5 часов — перезапуск
 
-# Не запускать несколько копий одновременно
-concurrency:
-  group: telegram-bot
-  cancel-in-progress: true
 
 jobs:
   run-bot:
