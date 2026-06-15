@@ -12,7 +12,7 @@ MOTIVATION_HOUR = int(os.getenv("MOTIVATION_HOUR", "7"))
 MOTIVATION_MINUTE = int(os.getenv("MOTIVATION_MINUTE", "0"))
 
 # Gemini model
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Max conversation history per user
 MAX_HISTORY = 10

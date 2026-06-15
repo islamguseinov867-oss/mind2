@@ -33,9 +33,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(response)
     except Exception as e:
         logger.error(f"AI response error: {e}")
-        await update.message.reply_text(
-            "😔 Извини, произошла ошибка при обработке твоего сообщения. Попробуй ещё раз."
-        )
+        err = str(e)
+        if "RESOURCE_EXHAUSTED" in err or "429" in err or "quota" in err.lower():
+            msg = "😔 Превышена квота ИИ (Gemini). Попробуй чуть позже или проверь лимиты ключа."
+        elif "API_KEY" in err or "API key" in err or "401" in err or "403" in err:
+            msg = "🔑 Проблема с ключом Gemini — проверь GEMINI_API_KEY."
+        else:
+            msg = "😔 Извини, произошла ошибка при обработке сообщения. Попробуй ещё раз."
+        await update.message.reply_text(msg)
 
 
 async def motivation_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
