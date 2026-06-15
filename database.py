@@ -1,7 +1,10 @@
 import aiosqlite
 import asyncio
+import logging
 from datetime import datetime
 from config import DATABASE_PATH
+
+logger = logging.getLogger(__name__)
 
 
 async def init_db():
@@ -156,10 +159,19 @@ async def add_reminder(user_id: int, text: str, remind_at: datetime):
 async def get_pending_reminders():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        now = datetime.utcnow().isoformat()
+        now = datetime.now().isoformat()
         async with db.execute(
             "SELECT * FROM reminders WHERE is_sent = 0 AND remind_at <= ?",
             (now,)
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def get_all_unsent_reminders():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM reminders WHERE is_sent = 0 ORDER BY remind_at ASC"
         ) as cursor:
             return await cursor.fetchall()
 
@@ -237,3 +249,65 @@ async def delete_goal(goal_id: int, user_id: int):
             (goal_id, user_id)
         )
         await db.commit()
+
+
+# --- Database class (used by handlers via bot_data["db"]) ---
+
+class Database:
+    """Object-oriented wrapper over the module-level functions above.
+    Returns dicts (so handlers can use .get()) and never raises on writes."""
+
+    def __init__(self, path: str = None):
+        self.path = path or DATABASE_PATH
+
+    async def init_db(self):
+        await init_db()
+
+    async def get_or_create_user(self, user_id, username=None, first_name=None, last_name=None):
+        await upsert_user(user_id, username or "", first_name or "", last_name or "")
+
+    async def add_note(self, user_id, content, is_task=False):
+        try:
+            return await add_note(user_id, content, is_task)
+        except Exception as e:
+            logger.error(f"add_note failed: {e}")
+            return -1
+
+    async def get_notes(self, user_id):
+        return [dict(r) for r in await get_notes(user_id)]
+
+    async def get_tasks(self, user_id):
+        return [dict(r) for r in await get_notes(user_id, only_tasks=True)]
+
+    async def mark_task_done(self, note_id, user_id):
+        try:
+            await mark_task_done(note_id, user_id)
+            return True
+        except Exception as e:
+            logger.error(f"mark_task_done failed: {e}")
+            return False
+
+    async def get_goals(self, user_id):
+        return [dict(r) for r in await get_goals(user_id)]
+
+    async def add_goal(self, user_id, title, description=""):
+        try:
+            return await add_goal(user_id, title, description)
+        except Exception as e:
+            logger.error(f"add_goal failed: {e}")
+            return -1
+
+    async def update_goal_status(self, goal_id, user_id, status):
+        try:
+            await update_goal_status(goal_id, user_id, status)
+            return True
+        except Exception as e:
+            logger.error(f"update_goal_status failed: {e}")
+            return False
+
+    async def add_reminder(self, user_id, text, remind_at):
+        try:
+            return await add_reminder(user_id, text, remind_at)
+        except Exception as e:
+            logger.error(f"add_reminder failed: {e}")
+            return -1

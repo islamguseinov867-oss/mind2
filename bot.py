@@ -77,7 +77,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def post_init(application: Application) -> None:
-    db = database.Database(config.DATABASE_PATH)
+    db = database.Database()
     await db.init_db()
     application.bot_data["db"] = db
     await setup_daily_motivation(application)
