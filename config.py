@@ -3,13 +3,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "mind2.db")
-MOTIVATION_HOUR = int(os.getenv("MOTIVATION_HOUR", "9"))
+
+# Daily motivation time (hour, minute in UTC)
+MOTIVATION_HOUR = int(os.getenv("MOTIVATION_HOUR", "7"))
 MOTIVATION_MINUTE = int(os.getenv("MOTIVATION_MINUTE", "0"))
 
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
-if not ANTHROPIC_API_KEY:
-    raise ValueError("ANTHROPIC_API_KEY is not set")
+# Claude model
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-5")
+
+# Max conversation history per user
+MAX_HISTORY = 10
+
+# Stress detection keywords (Russian)
+STRESS_KEYWORDS = [
+    "устал", "устала", "стресс", "тревога", "тревожно", "плохо",
+    "не могу", "не справляюсь", "помогите", "всё плохо", "всё пропало",
+    "депрессия", "грустно", "грустить", "беспокоит", "паника", "страшно",
+    "тяжело", "сложно", "не знаю что делать", "опустились руки",
+    "нет сил", "выгорание", "перегрузка"
+]
