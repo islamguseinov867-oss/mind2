@@ -1,11 +1,58 @@
 import json
 import asyncio
+import logging
 from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY, GEMINI_MODEL, MAX_HISTORY, STRESS_KEYWORDS
 import database
 
+logger = logging.getLogger(__name__)
+
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Модели по убыванию приоритета. Если основная упёрлась в лимит — пробуем следующую.
+MODEL_CHAIN = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-flash-latest"]
+# Убираем дубликаты, сохраняя порядок.
+MODEL_CHAIN = list(dict.fromkeys(m for m in MODEL_CHAIN if m))
+
+
+def _make_config(system_instruction: str) -> types.GenerateContentConfig:
+    # thinking_budget=0 отключает «размышления» 2.5-flash: быстрее и экономит квоту.
+    return types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
+    )
+
+
+async def _generate(contents, system_instruction: str = SYSTEM_PROMPT) -> str:
+    """Запрос к Gemini с ретраями и переключением моделей при сбое/лимите."""
+    last_error = None
+    for model in MODEL_CHAIN:
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=model,
+                    contents=contents,
+                    config=_make_config(system_instruction),
+                )
+                text = (response.text or "").strip()
+                if text:
+                    return text
+                last_error = "empty response"
+            except Exception as e:
+                last_error = e
+                err = str(e)
+                # Лимит запросов — ждём и пробуем снова, потом другую модель.
+                if "RESOURCE_EXHAUSTED" in err or "429" in err or "quota" in err.lower():
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                # Ключ/доступ — ретраи не помогут.
+                if "API_KEY" in err or "API key" in err or "401" in err or "403" in err:
+                    raise
+                await asyncio.sleep(1)
+        logger.warning(f"Model {model} failed: {last_error}")
+    raise RuntimeError(f"All Gemini models failed: {last_error}")
 
 SYSTEM_PROMPT = """Ты — «Второй Мозг», персональный ИИ-помощник, наставник и советник. Ты говоришь на русском языке.
 
@@ -63,13 +110,7 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
     contents = _build_contents(history, message_to_send)
 
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=GEMINI_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
-    )
-    assistant_reply = response.text
+    assistant_reply = await _generate(contents)
 
     history.append({"role": "user", "content": message_to_send})
     history.append({"role": "assistant", "content": assistant_reply})
@@ -80,20 +121,12 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
 
 async def get_motivation() -> str:
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=GEMINI_MODEL,
-        contents="Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное.",
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+    return await _generate(
+        "Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное."
     )
-    return response.text
 
 
 async def get_support_message(user_message: str) -> str:
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=GEMINI_MODEL,
-        contents=f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу.",
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+    return await _generate(
+        f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу."
     )
-    return response.text
