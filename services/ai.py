@@ -1,9 +1,10 @@
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from config import GEMINI_API_KEY, GEMINI_MODEL, MAX_HISTORY, STRESS_KEYWORDS
 import database
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """Ты — «Второй Мозг», персональный ИИ-помощник, наставник и советник. Ты говоришь на русском языке.
 
@@ -16,7 +17,7 @@ SYSTEM_PROMPT = """Ты — «Второй Мозг», персональный 
 
 Стиль общения:
 - Тёплый, но профессиональный
-- Краткие, чёткие ответы (2-4 абзаца максимум, если не нужно больше)
+- Краткие, чёткие ответы (2-4 абзаца максимум)
 - Используй структуру (списки, шаги) когда это помогает
 - Не используй чрезмерных похвал типа "Отличный вопрос!"
 - Будь честным и прямым
@@ -24,15 +25,7 @@ SYSTEM_PROMPT = """Ты — «Второй Мозг», персональный 
 Если пользователь кажется уставшим, тревожным или в стрессе:
 - Сначала прояви сочувствие и понимание
 - Не давай сразу советов — сначала выслушай
-- Предложи конкретную помощь после того, как поймёшь ситуацию
-
-Ты можешь помочь с:
-- Планированием и расстановкой приоритетов
-- Принятием решений
-- Личностным развитием
-- Преодолением прокрастинации
-- Управлением стрессом
-- Анализом ситуаций и проблем"""
+- Предложи конкретную помощь после того, как поймёшь ситуацию"""
 
 
 def detect_stress(text: str) -> bool:
@@ -40,12 +33,13 @@ def detect_stress(text: str) -> bool:
     return any(keyword in text_lower for keyword in STRESS_KEYWORDS)
 
 
-def _build_gemini_history(history: list) -> list:
-    gemini_history = []
+def _build_contents(history: list, user_message: str) -> list:
+    contents = []
     for msg in history:
         role = "user" if msg["role"] == "user" else "model"
-        gemini_history.append({"role": role, "parts": [msg["content"]]})
-    return gemini_history
+        contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+    return contents
 
 
 async def get_ai_response(user_id: int, user_message: str) -> str:
@@ -63,18 +57,16 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
     if is_stressed:
         message_to_send = f"[Пользователь кажется в стрессе или расстроен]\n{user_message}"
 
-    # Keep history without current message for Gemini chat history
     if len(history) > MAX_HISTORY * 2:
         history = history[-(MAX_HISTORY * 2):]
 
-    gemini_history = _build_gemini_history(history)
+    contents = _build_contents(history, message_to_send)
 
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=SYSTEM_PROMPT
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
     )
-    chat = model.start_chat(history=gemini_history)
-    response = chat.send_message(message_to_send)
     assistant_reply = response.text
 
     history.append({"role": "user", "content": message_to_send})
@@ -86,22 +78,18 @@ async def get_ai_response(user_id: int, user_message: str) -> str:
 
 
 async def get_motivation() -> str:
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=SYSTEM_PROMPT
-    )
-    response = model.generate_content(
-        "Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное."
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents="Дай мне короткое, мощное утреннее мотивационное послание на сегодня. Максимум 3-4 предложения. Что-то практичное и вдохновляющее, не банальное.",
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
     )
     return response.text
 
 
 async def get_support_message(user_message: str) -> str:
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=SYSTEM_PROMPT
-    )
-    response = model.generate_content(
-        f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу. Сначала покажи что понимаешь его чувства."
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"Пользователь написал: '{user_message}'. Он явно в стрессе или расстроен. Дай поддерживающий ответ с эмпатией, без лишних советов сразу.",
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
     )
     return response.text
