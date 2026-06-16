@@ -1,14 +1,10 @@
 name: Run Telegram Bot
 
-# Запускает бота на серверах GitHub.
-# Один прогон работает до 6 часов, затем перезапускается по расписанию.
 on:
-  workflow_dispatch:        # Кнопка "Run workflow" вручную
+  workflow_dispatch:
   schedule:
     - cron: "0 */5 * * *"   # Каждые 5 часов — перезапуск
 
-# Только один бот может слушать Telegram одновременно.
-# Новый запуск автоматически заменяет старый (новейший побеждает).
 concurrency:
   group: telegram-bot
   cancel-in-progress: true
@@ -16,13 +12,22 @@ concurrency:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 350    # ~5 ч 50 мин, затем job завершится сам
+    timeout-minutes: 350
+    permissions:
+      actions: write   # нужно для сохранения кеша
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Restore database from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: mind2.db
+          key: mind2-db-${{ github.run_id }}
+          restore-keys: mind2-db-
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -32,3 +37,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python bot.py
+
+      - name: Save database to cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: mind2.db
+          key: mind2-db-${{ github.run_id }}
