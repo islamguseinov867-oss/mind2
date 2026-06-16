@@ -3,7 +3,7 @@ name: Run Telegram Bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */5 * * *"   # Каждые 5 часов — перезапуск
+    - cron: "0 */2 * * *"   # Каждые 2 часа — перезапуск (перекрывает 350-мин таймаут)
 
 concurrency:
   group: telegram-bot
